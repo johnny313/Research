@@ -66,6 +66,8 @@ resp.close()
 #Access and process the PDFs, printing the gdu values for maturity and mid-silking
 for link in links:
     dat = parse_pdf(link)
-    reg = re.compile("GDUs[a-z\s].+[0-9]+") #retreives the gdu values, finding the containing regular expression 
-    inst  = re.findall(reg, dat)
-    print "%s, %s" % (get_num(inst[0]), get_num(inst[1]))
+    reg1 = re.compile("\n[0-9]+\sRM") #get relative maturity 
+    rm = re.findall(reg1, dat) 
+    reg2 = re.compile("GDUs[a-z\s].+[0-9]+") #retreives the gdu values, finding the containing regular expression 
+    inst  = re.findall(reg2, dat)
+    print "%s, %s, %s" % (get_num(rm[0]), get_num(inst[0]), get_num(inst[1]))
