@@ -108,4 +108,4 @@ if __name__ == "__main__":
     NIR_img = get_band_raster(landsat_base, 5)
     plt.imshow(NIR_img)#WDRVI(red_img, NIR_img))
     plt.show(block=True)
-    quit()
+
