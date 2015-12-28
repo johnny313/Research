@@ -5,6 +5,7 @@ from osgeo import gdal, gdalnumeric, ogr, osr
 import numpy as np
 import datetime
 import json
+import raster_utils
 
 def process_metadata_line(line):
     return line.strip('   \n')
@@ -20,16 +21,14 @@ def build_metadata_table(metadata_fn):
 def get_DOY(metadata_dict):
   return datetime.datetime.strptime(metadata_dict['DATE_ACQUIRED'], '%Y-%m-%d').date().timetuple().tm_yday
 
-# given L8 files for B2, B4, B5, metadata, and a polyhon within
-# the bounds of the raster, returns the mean NDVI value in the
-# polygon accounting for B2 cloud coverage
-
+#ensure the QA band values are valid 16 bit
 def mk_16(x):
     if len(x) == 16:
         return x
     else:
         return mk_16('0'+ x)    
 
+#QA logic here is the threshold for cloud probability. The QA band represents cloud presence/absence in a binary sequence, need to update this to use bit masking. 
 def QA_logic(x):
     biny = np.binary_repr(x)
     if len(biny) < 16:
@@ -37,7 +36,6 @@ def QA_logic(x):
     cloud = int(biny[0:2],2)
     cirrus = int(biny[2:4],2)
     return cloud + cirrus
-
 
 def WDRVI(red,nir,alpha=0.2):
     return (alpha*nir - red)/(alpha*nir + red)
@@ -84,7 +82,7 @@ def convert_dn_to_reflectance(dn_array, landsat_base, bn):
     # scaled for sun elevation
     return rf_array/sun_elevation_factor
 
-def get_band_raster(landsat_base, bn, _filter = True):
+def get_raster_DN_array(landsat_base, bn, _filter=True):
     #get band fn
     bnd_fn = landsat_base + '_B' + str(bn) + '.TIF'
     # read raster as ndarray
@@ -96,16 +94,23 @@ def get_band_raster(landsat_base, bn, _filter = True):
     #apply cloud filter from the Landsat QA band
     if _filter:
         dn_array = cloud_filter(dn_array, landsat_base)
+    return dn_array
+
+def transform_TOA(landsat_base, bn, _filter = True):
+    dn_array = get_raster_DN_array(landsat_base, bn, _filter)
     #convert the DN to reflectances, corrected for solar angle
     rf_array = convert_dn_to_reflectance(dn_array, landsat_base, bn)
     return rf_array
 
+#default returns RGB array
+def get_multiband_array(landsat_base, bn=(4,3,2)):
+    return np.dstack((raster_utils.hist_equalize_strech(raster_utils.linear_strech(get_raster_DN_array(landsat_base, b,False))) for b in bn)).astype(np.uint8)
+
 # TESTING
 if __name__ == "__main__":
     from matplotlib import pyplot as plt
-    landsat_base = '/Applications/bda/Bulk_Order_596039/L8_OLI_TIRS/LC80210302015127LGN00/LC80210302015127LGN00' 
-    #red_img = get_band_raster(landsat_base, 4)
-    NIR_img = get_band_raster(landsat_base, 5)
-    plt.imshow(NIR_img)#WDRVI(red_img, NIR_img))
+    landsat_base = '/Applications/bda/Bulk_Order_596039/L8_OLI_TIRS/LC80210302015191LGN00/LC80210302015191LGN00' 
+    RGB = get_multiband_array(landsat_base)
+    plt.imshow(RGB)
     plt.show(block=True)
-    quit()
+
