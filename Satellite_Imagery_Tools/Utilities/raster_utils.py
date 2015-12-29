@@ -20,7 +20,7 @@ def normalize(x, scale=255.):
     x = (x-mn)*scale/(mx-mn)
     return np.asarray(x,dtype=np.uint8)
     
-def stretch_histogram(x, percentile=95):
+def stretch_histogram(x,percentile=95):
     new_max = np.nanpercentile(x, percentile)
     x[np.where(np.logical_and(x>new_max, ~(np.isnan(x))))] = new_max
     return normalize(x)
@@ -37,9 +37,9 @@ def gamma_correction(x, gamma):
     lut = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
     return np.interp(x, np.arange(0, 256), lut)
 
-def enhance_rast(dn_array, method = None, gamma_cor = None):
+def enhance_rast(dn_array, method = None, gamma_cor = None, percentile=95):
      if method=='stretch_histogram':
-         rast = stretch_histogram(dn_array)
+         rast = stretch_histogram(dn_array, percentile)
      elif method=='hist_equalize':
          rast = hist_equalize_stretch(dn_array)
      else:
@@ -133,12 +133,18 @@ def transform_TOA(landsat_base, bn, cloud_filter = True):
     rf_array = convert_dn_to_reflectance(dn_array, landsat_base, bn)
     return rf_array
 
+#####################################################
+#display Images
+#####################################################
+
+
 #default returns RGB array
-def get_multiband_array(landsat_base, bn=(4,3,2), BB = (None,None,None,None), enhance=None, gamma=None, mask = False ):
+def get_multiband_array(landsat_base, bn=(4,3,2), BB = (None,None,None,None), enhance=None, gamma=None, mask = False, percentile=95):
     rast_tup = (normalize(get_raster_DN_array(landsat_base, b, BB, mask)) for b in bn)
     if enhance:
-        rast_tup = (enhance_rast(rast,enhance, gamma) for rast in rast_tup)
+        rast_tup = (enhance_rast(rast,enhance, gamma, percentile) for rast in rast_tup)
     return np.dstack(rast_tup).astype(np.uint8)
+
 
 #calculate WDRVI
 # see http://www.gap.uidaho.edu/Bulletins/12/The%20Wide%20Dynamic%20Range%20Vegetation%20Index.htm
