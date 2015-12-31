@@ -8,7 +8,7 @@ from sklearn import cluster as Kclust, metrics
 from sklearn import preprocessing
 
 #get prob density plot of arry
-def plt_density(data,title=None,n=None,color='blue'):
+def density(data,title=None,n=None,color='blue'):
     #remove nans
     data = data[~np.isnan(data)]
     if n:
@@ -18,9 +18,7 @@ def plt_density(data,title=None,n=None,color='blue'):
     kde = gaussian_kde( data )
     # these are the values over wich your kernel will be evaluated
     dist_space = np.linspace( min(data), max(data), 100 )
-    # plot the results
-    plt.title(title)
-    plt.plot( dist_space, kde(dist_space), color=color)
+    return dist_space, kde(dist_space)
 
 def scale_image(array):
     ar = np.copy(array)
