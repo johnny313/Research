@@ -87,6 +87,11 @@ def get_raster_DN_array(landsat_base, bn, extent=(None,None,None,None), _filter=
         dn_array = cloud_filter(dn_array, landsat_base)
     return dn_array
 
+def read_raster(fn):
+    # read raster as ndarray
+    dn_array = gdal.Open(fn)
+    dn_array = np.array(dn_array.GetRasterBand(1).ReadAsArray()).astype(float)
+    return dn_array
 
 #get the parameters needed from metadata to transform the DN values to top of atmosphere reflectance
 def get_reflectance_parameters(landsat_base, bn):
@@ -101,7 +106,49 @@ def get_reflectance_parameters(landsat_base, bn):
     sun_elevation = mdata['SUN_ELEVATION']
     mult = mdata[mult_key]
     add = mdata[add_key]
-    return mult, add, sun_elevation
+    return map(float,[mult, add, sun_elevation])
+
+def get_radiance_parameters(landsat_base, bn):
+    #use base scene string to get fn for metadata 
+    metadata_fn = landsat_base + '_MTL.TXT'
+    #build lut for metadata and get keys for band of interest
+    mdata = build_metadata_table(metadata_fn)
+    # metadata keywords (2: BLUE, 4: RED, 5: NIR)
+    mult_key = "RADIANCE_MULT_BAND_"+str(bn)
+    add_key  = "RADIANCE_ADD_BAND_"+str(bn)
+    mult = mdata[mult_key]
+    add = mdata[add_key]
+    return map(float,[mult, add])
+
+def get_brightness_temp_parameters(landsat_base, bn):
+    #use base scene string to get fn for metadata 
+    metadata_fn = landsat_base + '_MTL.TXT'
+    #build lut for metadata and get keys for band of interest
+    mdata = build_metadata_table(metadata_fn)
+    # metadata keywords (2: BLUE, 4: RED, 5: NIR)
+    K1_key = "K1_CONSTANT_BAND_"+str(bn)
+    K2_key  = "K2_CONSTANT_BAND_"+str(bn)
+    K1 = mdata[K1_key]
+    K2 = mdata[K2_key]
+    return map(float,[K1, K2])
+
+#Normalized Impervious Surface Index
+#8 bit rescale functions from: http://landcover.usgs.gov/pdf/image_preprocessing.pdf
+def reflectance_rescale(x):
+    x[np.where(x>0.6375)] = 0.6375
+    return (x*400).astype(np.uint8)
+
+def thermal_rescale(x):
+    return ((x - 240)*3).astype(np.uint8)
+
+#WI: Water index, SWIR: short wave IR, NIR: near ir, TIR: thermal ir
+def NISI(GREEN, SWIR, NIR, TIR):
+    #rescale reflectance values to 8 bit
+    G,S,N = map(reflectance_rescale,[GREEN, SWIR, NIR])
+    WI = calc_normalized_diff(G, N, alpha=1.0)
+    #rescale thermal to 8 bit
+    T = thermal_rescale(TIR)
+    return (T - ((WI + S + N) / 3.)) / (T + ((WI + S + N) / 3.))
 
 def get_quality_band(landsat_base):
     #build fn for quality band
@@ -117,7 +164,16 @@ def cloud_filter(rf_array,landsat_base):
     output_array = np.copy(rf_array).astype(float)
     output_array[c_x, c_y] = np.nan
     return output_array
-    
+
+def convert_dn_to_radiance(dn_array, landsat_base, bn):
+    mult, add = get_radiance_parameters(landsat_base, bn)
+    # calculate TOA radiance given digital number
+    return float(mult)*dn_array  + float(add)
+
+def convert_radiance_to_brightness_temp(r_array, landsat_base, bn):
+    K1, K2 = get_brightness_temp_parameters(landsat_base, bn)
+    return K2 / np.log(( K1 / r_array ) + 1)
+
 def convert_dn_to_reflectance(dn_array, landsat_base, bn):
     #sun elevation scale factor
     mult, add, sun_elevation = get_reflectance_parameters(landsat_base, bn)
@@ -133,6 +189,12 @@ def transform_TOA(landsat_base, bn, cloud_filter = True):
     rf_array = convert_dn_to_reflectance(dn_array, landsat_base, bn)
     return rf_array
 
+def transform_sat_brightness_temp(landsat_base, bn, cloud_filter=True):
+    dn_array = get_raster_DN_array(landsat_base, bn, _filter=cloud_filter)
+    radiance = convert_dn_to_radiance(dn_array, landsat_base, bn)
+    temp = convert_radiance_to_brightness_temp(radiance, landsat_base, bn)
+    return temp
+
 #####################################################
 #display Images
 #####################################################
@@ -146,10 +208,10 @@ def get_multiband_array(landsat_base, bn=(4,3,2), BB = (None,None,None,None), en
     return np.dstack(rast_tup).astype(np.uint8)
 
 
-#calculate WDRVI
-# see http://www.gap.uidaho.edu/Bulletins/12/The%20Wide%20Dynamic%20Range%20Vegetation%20Index.htm
-def WDRVI(red,nir,alpha=0.2):
-    return (alpha*nir - red)/(alpha*nir + red)
+#calculate generic normalized difference index 
+# For details of WDRVI, see http://www.gap.uidaho.edu/Bulletins/12/The%20Wide%20Dynamic%20Range%20Vegetation%20Index.htm
+def calc_normalized_diff(b1,b2,alpha=0.2):
+    return (alpha*b1 - b2)/(alpha*b1 + b2)
 
 
 
@@ -162,6 +224,12 @@ def get_geotrans_prj(fn):
     geo_trans = rast.GetGeoTransform()
     prj = rast.GetProjection()
     return {'geo_trns':geo_trans,'prj':prj}
+
+def transform_raster(input_rast, spatial_ref_dict):
+    input_rast.SetGeoTransform(spatial_ref_dict['geo_trns'])  
+    input_rast.SetProjection(spatial_ref_dict['prj'])
+    return input_rast
+
 
 def write_tiff(array, fn, spatial_ref_dict):
     pixel_dims = array.shape
