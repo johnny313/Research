@@ -20,12 +20,14 @@ def density(data,title=None,n=None,color='blue'):
     dist_space = np.linspace( min(data), max(data), 100 )
     return dist_space, kde(dist_space)
 
+#zero mean, SD 1 scale of an array, exclude NAN
 def scale_image(array):
     ar = np.copy(array)
     x_coord,y_coord = np.where(~np.isnan(ar))
     ar[x_coord,y_coord] = preprocessing.scale(ar[x_coord,y_coord]) 
     return ar
 
+#get cts of the unique values in an array, if cts=False, just get unique values
 def frequ_ct(x, cts = False): 
     x = x.flatten().astype('uint8')
     y = np.bincount(x)
@@ -35,6 +37,11 @@ def frequ_ct(x, cts = False):
     elif cts:
         return {v:ct for v,ct in zip(ii,y[ii])}
 
+##################################
+# K Means 
+##################################
+
+#estimate the `k` in k means using the CH stat
 def CH_stat(X):
     #source: http://web.stanford.edu/~hastie/Papers/gap.pdf
     tot_ss = kmeans_model = Kclust.KMeans(n_clusters=1, random_state=1332).fit(X).inertia_
@@ -47,6 +54,7 @@ def CH_stat(X):
     ch = (btwn_ss/(ks-1)) / (Wks/(X.shape[0] - ks))
     return ks[list(ch).index(max(ch))] 
 
+#wrapper for scikit-learn k-means for list of images
 def k_means(img_list, k=3):
     out_img = np.copy(img_list[0])
     full_x, full_y = np.where(~np.isnan(img_list[0]))
@@ -62,8 +70,17 @@ def k_means(img_list, k=3):
     out_img[full_x, full_y] = lables
     return k_model.cluster_centers_,  out_img
 
+###################################
+#Sampeling tools
+###################################
+
 def random_ints(i, n):
     return np.array(np.random.choice(range(i),n))
+
+#two stage sample
+#
+# 1) traverse the image in a reg grid
+# 2) sample each cell w/ `random_ints` function
 
 def two_step_sample(array, total_n, step=(100, 100)):
     sample = []
@@ -79,3 +96,4 @@ def two_step_sample(array, total_n, step=(100, 100)):
             samp = samp[np.where(~np.isnan(samp[:,1]))]
             sample = sample + samp.tolist()
     return sample
+
