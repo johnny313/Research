@@ -5,7 +5,7 @@ This project is a sandbox for playing with satellite imagery. In the `Utilities`
 - Normailize and enhance images for viewing
 - General statistical tools and utilities for modeling and displaying data
 
-The IPython notebooks below put these tools to use:
+The IPython notebooks put these tools to use:
 - Visualizing multi-band imagery, showing the effects of different imagery enhancement methods
 - Using random forest and Landsat 8 imagery to predict land cover 
 
